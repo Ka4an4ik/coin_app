@@ -28,9 +28,9 @@ Future<List<Currency>> fetchCurrencies() async {
   print("Загрузка курса валют");
   await Future.delayed(const Duration(seconds: 2));
   return [
-    Currency("Доллар", CurrencyType.usd, 80.5),
-    Currency("Евро", CurrencyType.eur, 92.3),
-    Currency("Юань", CurrencyType.cny, 10.9),
+    Currency("Доллар", CurrencyType.usd, 95.5),
+    Currency("Евро", CurrencyType.eur, 102.3),
+    Currency("Юань", CurrencyType.cny, 12.9),
   ];
 }
 
