@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:coin_app/data/datasource/country_remote_datasource.dart';
 import 'package:coin_app/data/repository/country_repository_impl.dart';
 import 'package:coin_app/domain/repository/country_repository.dart';
@@ -7,30 +8,146 @@ import 'package:coin_app/models/dto/country_dto.dart';
 import 'package:coin_app/bloc/country_bloc.dart';
 import 'package:coin_app/bloc/country_event.dart';
 import 'package:coin_app/bloc/country_state.dart';
+import 'package:coin_app/bloc/favorites_bloc.dart';
+import 'package:coin_app/bloc/favorites_event.dart';
+import 'package:coin_app/bloc/favorites_state.dart';
+import 'package:coin_app/services/database_service.dart';
+
+import 'l10n/app_localizations.dart';
 
 void main() {
-  runApp(const Lab6App());
+  runApp(const Lab7App());
 }
 
-class Lab6App extends StatelessWidget {
-  const Lab6App({super.key});
+class Lab7App extends StatefulWidget {
+  const Lab7App({super.key});
+
+  @override
+  State<Lab7App> createState() => _Lab7AppState();
+}
+
+class _Lab7AppState extends State<Lab7App> {
+  Locale _locale = const Locale('ru');
+
+  void _changeLocale(Locale locale) {
+    setState(() {
+      _locale = locale;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Создаем репозиторий
+    // Создаем сервисы
     final CountryRepository repository = CountryRepositoryImpl(
       dataSource: CountryRemoteDataSource(),
     );
+    final DatabaseService databaseService = DatabaseService();
 
-    return MaterialApp(
-      title: 'Лабораторная 6 - BLoC + Debounce',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (context) => CountryBloc(repository: repository),
+        ),
+        BlocProvider(
+          create: (context) => FavoritesBloc(databaseService: databaseService)
+            ..add(const LoadFavorites()),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'Лабораторная 7',
+        locale: _locale,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('en'),
+          Locale('ru'),
+        ],
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: MainScreen(onLocaleChange: _changeLocale, currentLocale: _locale),
       ),
-      home: BlocProvider(
-        create: (context) => CountryBloc(repository: repository),
-        child: const CountrySearchScreen(),
+    );
+  }
+}
+
+class MainScreen extends StatefulWidget {
+  final Function(Locale) onLocaleChange;
+  final Locale currentLocale;
+
+  const MainScreen({
+    super.key,
+    required this.onLocaleChange,
+    required this.currentLocale,
+  });
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _currentIndex = 0;
+
+  void _toggleLocale() {
+    final newLocale = widget.currentLocale.languageCode == 'ru'
+        ? const Locale('en')
+        : const Locale('ru');
+    widget.onLocaleChange(newLocale);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.appTitle),
+        actions: [
+          IconButton(
+            icon: Text(
+              widget.currentLocale.languageCode.toUpperCase(),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            tooltip: widget.currentLocale.languageCode == 'ru'
+                ? 'Switch to English'
+                : 'Переключить на Русский',
+            onPressed: _toggleLocale,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: const [
+          CountrySearchScreen(),
+          FavoritesScreen(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.search),
+            label: l10n.search,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.favorite),
+            label: l10n.favorites,
+          ),
+        ],
       ),
     );
   }
@@ -60,11 +177,9 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Поиск стран (BLoC)'),
-        elevation: 0,
-      ),
       body: Column(
         children: [
           // Поле поиска
@@ -77,7 +192,7 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
                 context.read<CountryBloc>().add(SearchCountries(query));
               },
               decoration: InputDecoration(
-                hintText: 'Введите название страны...',
+                hintText: l10n.searchHint,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -101,10 +216,10 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
             child: BlocBuilder<CountryBloc, CountryState>(
               builder: (context, state) {
                 if (state is CountryInitial) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'Введите название страны для поиска',
-                      style: TextStyle(fontSize: 16),
+                      l10n.searchPlaceholder,
+                      style: const TextStyle(fontSize: 16),
                     ),
                   );
                 } else if (state is CountryLoading) {
@@ -116,26 +231,26 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
                   return Stack(
                     children: [
                       _buildCountryList(state.currentCountries),
-                      const Positioned(
+                      Positioned(
                         top: 8,
                         left: 0,
                         right: 0,
                         child: Center(
                           child: Card(
                             child: Padding(
-                              padding: EdgeInsets.all(8.0),
+                              padding: const EdgeInsets.all(8.0),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  SizedBox(
+                                  const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
                                   ),
-                                  SizedBox(width: 8),
-                                  Text('Обновление...'),
+                                  const SizedBox(width: 8),
+                                  Text(l10n.refreshing),
                                 ],
                               ),
                             ),
@@ -180,7 +295,7 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Страны не найдены',
+                                  l10n.noResults,
                                   style: TextStyle(
                                     fontSize: 18,
                                     color: Colors.grey[600],
@@ -188,7 +303,7 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Запрос: "${state.query}"',
+                                  l10n.searchQuery(state.query),
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.grey[500],
@@ -244,7 +359,7 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
                                         .add(const RefreshCountries());
                                   },
                                   icon: const Icon(Icons.refresh),
-                                  label: const Text('Повторить'),
+                                  label: Text(l10n.retry),
                                 ),
                               ],
                             ),
@@ -276,115 +391,121 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
   }
 }
 
-class CountryCard extends StatefulWidget {
+class CountryCard extends StatelessWidget {
   final CountryDTO country;
 
   const CountryCard({super.key, required this.country});
 
   @override
-  State<CountryCard> createState() => _CountryCardState();
-}
-
-class _CountryCardState extends State<CountryCard> {
-  bool _isFavorite = false;
-
-  @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CountryDetailScreen(country: widget.country),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              // Флаг
-              if (widget.country.flagUrl.isNotEmpty)
-                Container(
-                  width: 80,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey),
+    final l10n = AppLocalizations.of(context)!;
+
+    return BlocBuilder<FavoritesBloc, FavoritesState>(
+      builder: (context, favState) {
+        final isFavorite = favState is FavoritesLoaded &&
+            favState.isFavorite(country.code);
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BlocProvider.value(
+                    value: context.read<FavoritesBloc>(),
+                    child: CountryDetailScreen(country: country),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      widget.country.flagUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Text('No flag'),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  // Флаг
+                  if (country.flagUrl.isNotEmpty)
+                    Container(
+                      width: 80,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          country.flagUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Text('No flag'),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 12),
+                  // Информация о стране
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          country.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${country.region} • ${country.code}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${l10n.capital}: ${country.capital}',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              const SizedBox(width: 12),
-              // Информация о стране
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.country.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  // Кнопка избранного
+                  IconButton(
+                    icon: Icon(
+                      isFavorite ? Icons.favorite : Icons.favorite_border,
+                      color: isFavorite ? Colors.red : null,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${widget.country.region} • ${widget.country.code}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Столица: ${widget.country.capital}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ],
-                ),
+                    onPressed: () {
+                      context
+                          .read<FavoritesBloc>()
+                          .add(ToggleFavorite(country));
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isFavorite
+                                ? l10n.removedFromFavorites(country.name)
+                                : l10n.addedToFavorites(country.name),
+                          ),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-              // Кнопка избранного
-              IconButton(
-                icon: Icon(
-                  _isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: _isFavorite ? Colors.red : null,
-                ),
-                onPressed: () {
-                  setState(() {
-                    _isFavorite = !_isFavorite;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        _isFavorite
-                            ? '${widget.country.name} добавлена в избранное'
-                            : '${widget.country.name} удалена из избранного',
-                      ),
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -519,5 +640,114 @@ class CountryDetailScreen extends StatelessWidget {
           RegExp(r'\B(?=(\d{3})+(?!\d))'),
           (Match m) => ' ',
         );
+  }
+}
+
+// Экран избранного
+class FavoritesScreen extends StatelessWidget {
+  const FavoritesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.favorites),
+        elevation: 0,
+      ),
+      body: BlocBuilder<FavoritesBloc, FavoritesState>(
+        builder: (context, state) {
+          if (state is FavoritesLoading) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (state is FavoritesLoaded) {
+            if (state.favorites.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.favorite_border,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.noFavorites,
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.addSomeCountries,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                context.read<FavoritesBloc>().add(const LoadFavorites());
+                await context
+                    .read<FavoritesBloc>()
+                    .stream
+                    .firstWhere((s) => s is FavoritesLoaded);
+              },
+              child: ListView.builder(
+                itemCount: state.favorites.length,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final country = state.favorites[index];
+                  return CountryCard(country: country);
+                },
+              ),
+            );
+          } else if (state is FavoritesError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      state.message,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.red,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      context.read<FavoritesBloc>().add(const LoadFavorites());
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: Text(l10n.retry),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return const SizedBox.shrink();
+        },
+      ),
+    );
   }
 }

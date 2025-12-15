@@ -1,0 +1,112 @@
+{
+  "appTitle": "Country Search",
+  "@appTitle": {
+    "description": "Application title"
+  },
+  "searchHint": "Enter country name...",
+  "@searchHint": {
+    "description": "Search field hint"
+  },
+  "searchPlaceholder": "Enter a country name to search",
+  "@searchPlaceholder": {
+    "description": "Placeholder when search is empty"
+  },
+  "noResults": "No countries found",
+  "@noResults": {
+    "description": "Message when no results"
+  },
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading indicator"
+  },
+  "refreshing": "Refreshing...",
+  "@refreshing": {
+    "description": "Refresh indicator"
+  },
+  "error": "Error",
+  "@error": {
+    "description": "Error title"
+  },
+  "retry": "Retry",
+  "@retry": {
+    "description": "Retry button"
+  },
+  "region": "Region",
+  "@region": {
+    "description": "Region label"
+  },
+  "capital": "Capital",
+  "@capital": {
+    "description": "Capital label"
+  },
+  "population": "Population",
+  "@population": {
+    "description": "Population label"
+  },
+  "languages": "Languages",
+  "@languages": {
+    "description": "Languages label"
+  },
+  "currencies": "Currencies",
+  "@currencies": {
+    "description": "Currencies label"
+  },
+  "countryCode": "Country Code",
+  "@countryCode": {
+    "description": "Country code label"
+  },
+  "basicInfo": "Basic Information",
+  "@basicInfo": {
+    "description": "Basic info section title"
+  },
+  "name": "Name",
+  "@name": {
+    "description": "Name label"
+  },
+  "addedToFavorites": "{country} added to favorites",
+  "@addedToFavorites": {
+    "description": "Added to favorites message",
+    "placeholders": {
+      "country": {
+        "type": "String",
+        "example": "Russia"
+      }
+    }
+  },
+  "removedFromFavorites": "{country} removed from favorites",
+  "@removedFromFavorites": {
+    "description": "Removed from favorites message",
+    "placeholders": {
+      "country": {
+        "type": "String",
+        "example": "Russia"
+      }
+    }
+  },
+  "searchQuery": "Query: \"{query}\"",
+  "@searchQuery": {
+    "description": "Search query display",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "Russia"
+      }
+    }
+  },
+  "favorites": "Favorites",
+  "@favorites": {
+    "description": "Favorites tab"
+  },
+  "search": "Search",
+  "@search": {
+    "description": "Search tab"
+  },
+  "noFavorites": "No favorite countries yet",
+  "@noFavorites": {
+    "description": "Empty favorites message"
+  },
+  "addSomeCountries": "Search for countries and add them to favorites",
+  "@addSomeCountries": {
+    "description": "Instruction for adding favorites"
+  }
+}
