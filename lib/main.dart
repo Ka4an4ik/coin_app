@@ -1,25 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:coin_app/data/datasource/country_remote_datasource.dart';
 import 'package:coin_app/data/repository/country_repository_impl.dart';
 import 'package:coin_app/domain/repository/country_repository.dart';
 import 'package:coin_app/models/dto/country_dto.dart';
+import 'package:coin_app/bloc/country_bloc.dart';
+import 'package:coin_app/bloc/country_event.dart';
+import 'package:coin_app/bloc/country_state.dart';
 
 void main() {
-  runApp(const Lab5App());
+  runApp(const Lab6App());
 }
 
-class Lab5App extends StatelessWidget {
-  const Lab5App({super.key});
+class Lab6App extends StatelessWidget {
+  const Lab6App({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Создаем репозиторий
+    final CountryRepository repository = CountryRepositoryImpl(
+      dataSource: CountryRemoteDataSource(),
+    );
+
     return MaterialApp(
-      title: 'Лабораторная 5 - Поиск стран',
+      title: 'Лабораторная 6 - BLoC + Debounce',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const CountrySearchScreen(),
+      home: BlocProvider(
+        create: (context) => CountryBloc(repository: repository),
+        child: const CountrySearchScreen(),
+      ),
     );
   }
 }
@@ -32,18 +44,11 @@ class CountrySearchScreen extends StatefulWidget {
 }
 
 class _CountrySearchScreenState extends State<CountrySearchScreen> {
-  late CountryRepository _repository;
   late TextEditingController _searchController;
-  List<CountryDTO> _searchResults = [];
-  bool _isLoading = false;
-  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Инициализация репозитория с источником данных
-    final dataSource = CountryRemoteDataSource();
-    _repository = CountryRepositoryImpl(dataSource: dataSource);
     _searchController = TextEditingController();
   }
 
@@ -53,46 +58,11 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
     super.dispose();
   }
 
-  /// Метод поиска стран через репозиторий
-  Future<void> _searchCountries(String query) async {
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _errorMessage = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final results = await _repository.searchCountries(query);
-      setState(() {
-        _searchResults = results;
-        if (results.isEmpty) {
-          _errorMessage = 'Страны не найдены';
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Ошибка: ${e.toString()}';
-        _searchResults = [];
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Поиск стран'),
+        title: const Text('Поиск стран (BLoC)'),
         elevation: 0,
       ),
       body: Column(
@@ -102,10 +72,22 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchController,
-              onChanged: _searchCountries,
+              onChanged: (query) {
+                // Отправляем событие поиска в BLoC
+                context.read<CountryBloc>().add(SearchCountries(query));
+              },
               decoration: InputDecoration(
                 hintText: 'Введите название страны...',
                 prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          context.read<CountryBloc>().add(const ClearSearch());
+                        },
+                      )
+                    : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -114,42 +96,182 @@ class _CountrySearchScreenState extends State<CountrySearchScreen> {
               ),
             ),
           ),
-          // Сообщение об ошибке
-          if (_errorMessage != null && !_isLoading)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          // Индикатор загрузки
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: CircularProgressIndicator(),
-            ),
-          // Список результатов
+          // Основной контент с BlocBuilder
           Expanded(
-            child: _searchResults.isEmpty && !_isLoading
-                ? Center(
+            child: BlocBuilder<CountryBloc, CountryState>(
+              builder: (context, state) {
+                if (state is CountryInitial) {
+                  return const Center(
                     child: Text(
-                      _searchController.text.isEmpty
-                          ? 'Введите название страны для поиска'
-                          : 'Результатов не найдено',
-                      style: const TextStyle(fontSize: 16),
+                      'Введите название страны для поиска',
+                      style: TextStyle(fontSize: 16),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: _searchResults.length,
-                    itemBuilder: (context, index) {
-                      final country = _searchResults[index];
-                      return CountryCard(country: country);
+                  );
+                } else if (state is CountryLoading) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                } else if (state is CountryRefreshing) {
+                  // Показываем данные с индикатором обновления
+                  return Stack(
+                    children: [
+                      _buildCountryList(state.currentCountries),
+                      const Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Обновление...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                } else if (state is CountryLoaded) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      context.read<CountryBloc>().add(const RefreshCountries());
+                      // Ждем, пока не изменится состояние
+                      await context
+                          .read<CountryBloc>()
+                          .stream
+                          .firstWhere((s) => s is! CountryRefreshing);
                     },
-                  ),
+                    child: _buildCountryList(state.countries),
+                  );
+                } else if (state is CountryEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      context.read<CountryBloc>().add(const RefreshCountries());
+                      await context
+                          .read<CountryBloc>()
+                          .stream
+                          .firstWhere((s) => s is! CountryRefreshing);
+                    },
+                    child: ListView(
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.search_off,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Страны не найдены',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Запрос: "${state.query}"',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else if (state is CountryError) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      context.read<CountryBloc>().add(const RefreshCountries());
+                      await context
+                          .read<CountryBloc>()
+                          .stream
+                          .firstWhere((s) => s is! CountryRefreshing);
+                    },
+                    child: ListView(
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  size: 64,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(height: 16),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 32.0),
+                                  child: Text(
+                                    state.message,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.red,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    context
+                                        .read<CountryBloc>()
+                                        .add(const RefreshCountries());
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Повторить'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCountryList(List<CountryDTO> countries) {
+    return ListView.builder(
+      itemCount: countries.length,
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemBuilder: (context, index) {
+        final country = countries[index];
+        return CountryCard(country: country);
+      },
     );
   }
 }
